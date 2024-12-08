@@ -3,6 +3,7 @@
   <Add ref="add" @load="list?.getList"/>
   <Logs ref="logs"/>
   <Manage ref="manage" @load="list?.getList"/>
+  <Mikan2 ref="mikan2"/>
   <div style="height: 100%;display: flex;flex-direction: column;">
     <div id="header">
       <div style="margin: 10px;" class="auto">
@@ -45,6 +46,16 @@
             </el-icon>
             <template v-if="isNotMobile()">
               添加
+            </template>
+          </el-button>
+        </div>
+        <div style="margin: 0 4px;">
+          <el-button type="primary" text bg @click="mikan2?.show" >
+            <el-icon :class="elIconClass()">
+              <Plus/>
+            </el-icon>
+            <template v-if="isNotMobile()">
+              Mikan
             </template>
           </el-button>
         </div>
@@ -94,6 +105,7 @@
             </template>
           </el-button>
         </div>
+
       </div>
     </div>
     <div style="flex: 1;overflow: hidden;">
@@ -114,8 +126,10 @@ import {ElMessage} from "element-plus";
 import Popconfirm from "../other/Popconfirm.vue";
 import Manage from "./Manage.vue";
 import {useWindowSize} from "@vueuse/core";
+import Mikan2 from "./Mikan2.vue";
 
 const manage = ref()
+const mikan2 = ref()
 
 const title = ref('')
 const enable = ref('已启用')
