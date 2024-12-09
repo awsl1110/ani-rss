@@ -126,7 +126,7 @@ import {ElMessage} from "element-plus";
 import Popconfirm from "../other/Popconfirm.vue";
 import Manage from "./Manage.vue";
 import {useWindowSize} from "@vueuse/core";
-import Mikan2 from "./Mikan2.vue";
+import Mikan2 from "../mikan/Mikan2.vue";
 
 const manage = ref()
 const mikan2 = ref()
