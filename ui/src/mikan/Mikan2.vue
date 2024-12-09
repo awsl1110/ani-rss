@@ -1,16 +1,22 @@
 <template>
-  <el-dialog v-model="state.dialog" title="Mikan 订阅" fullscreen destroy-on-close :close-on-click-modal="false">
+  <el-dialog 
+    v-model="state.dialog" 
+    title="Mikan 订阅" 
+    fullscreen 
+    destroy-on-close 
+    :close-on-click-modal="false"
+    class="mikan-dialog"
+  >
     <div class="mikan-container">
       <Search 
+        ref="searchRef"
         :loading="state.loading"
-        :seasons="state.data.seasons"
         v-model="state.text"
-        v-model:seasonValue="state.season"
         @search="handlers.search"
-        @change="handlers.change"
         @clear="handlers.clearSearch"
+        @filter="handlers.handleFilter"
+        @season-change="handlers.handleSeasonChange"
       />
-      
       <AnimeList
         :items="state.data.items"
         :loading="state.loading"
@@ -53,7 +59,6 @@ const INITIAL_STATE = {
   drawer: false,
   showAni: false,
   text: '',
-  season: '',
   data: {
     seasons: [],
     items: []
@@ -167,12 +172,7 @@ const handlers = {
       state.value.text = name
       handlers.search()
     } else {
-      apiCalls.getList().then(() => {
-        const defaultSeason = state.value.data.seasons?.find(s => s.select)
-        if (defaultSeason) {
-          state.value.season = defaultSeason.year + ' ' + defaultSeason.season
-        }
-      })
+      list()
     }
   },
 
@@ -184,28 +184,10 @@ const handlers = {
     })
   },
 
-  // 季度切换
-  change(v) {
-    if (!v) return
-
-    // 直接使用选中的季度数据
-    for (let item of state.value.data.seasons) {
-      if (item.year + ' ' + item.season === v) {
-        apiCalls.getList(item)
-        return
-      }
-    }
-  },
-
   // 清除搜索
   clearSearch() {
     state.value.text = ''
-    // 如果当前有选中的季度，使用季度数据
-    if (state.value.season) {
-      handlers.change(state.value.season)
-    } else {
-      apiCalls.getList()
-    }
+    list()
   },
 
   // 加载字幕组信息
@@ -263,13 +245,36 @@ const handlers = {
     } finally {
       state.value.loadingStates.subscribe = false
     }
-  }
-}
+  },
 
-// 工具函数
-const utils = {
-  img: (it) => `api/file?img=${btoa(it.cover)}&s=${window.authorization}`,
-  open: (url) => window.open(url)
+  // 添加过滤器处理方法
+  handleFilter({ day, type }) {
+    // 如果没有数据，直接返回
+    if (!state.value.data.items?.length) return
+
+    // 过滤数据
+    if (day) {
+      // 滚动到对应的星期区域
+      const element = document.querySelector(`[data-day="${day}"]`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+
+    if (type) {
+      // 滚动到对应的类型区域
+      const element = document.querySelector(`[data-type="${type}"]`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+  },
+
+  // 添加处理季节变化的方法
+  async handleSeasonChange(season) {
+    if (!season) return
+    await list(season, state.value.text)
+  },
 }
 
 // 重置状态
@@ -278,13 +283,21 @@ const resetState = () => {
   addAni.value = {...INITIAL_ANI_STATE}
 }
 
-// 修改list方法
-const list = async (body = {}, searchText = '') => {
+// 修改 list 方法
+const list = async (params = {}, searchText = '') => {
   state.value.loading = true
   try {
-    const res = await api.post('api/mikan?text=' + searchText, body)
+    const res = await api.post('api/mikan', { 
+      ...params,
+      text: searchText 
+    })
+    
     if (res.data) {
       state.value.data = res.data
+      // 更新季度选择器的选项
+      if (res.data.seasons?.length) {
+        searchRef.value?.updateSeasons(res.data.seasons)
+      }
     }
   } catch (error) {
     console.error('获取列表失败:', error)
@@ -309,66 +322,53 @@ const BREAKPOINTS = {
 const drawerSize = computed(() => {
   return window.innerWidth <= BREAKPOINTS.mobile ? '100%' : '800px'
 })
+
+// 添加 ref 以访问 Search 组件的方法
+const searchRef = ref()
 </script>
 
 <style scoped>
-.group-item {
-  padding: 16px;
-}
-
-.group-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.group-info {
-  flex: 1;
-}
-
-.group-title {
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.group-tags {
-  margin-top: 12px;
-}
-
-.group-episodes {
-  margin-top: 16px;
-}
-
-/* 调整一些布局、间距等 */
-@media screen and (max-width: 768px) {
-  .group-item {
-    padding: 12px;
-    margin-bottom: 12px;
-  }
-
-  .group-header {
-    gap: 12px;
-  }
-
-  .group-title {
-    font-size: 14px;
-  }
-
-  .el-table .cell {
-    padding: 8px;
-  }
-}
-
 .mikan-container {
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 16px;
+  position: relative;
+  overflow-y: auto;
 }
 
 .anime-list-container {
   flex: 1;
+  margin-top: 8px;
+  overflow: auto;
+}
+
+/* Dialog 相关样式调整 */
+:deep(.el-dialog) {
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  max-height: 100%;
+  height: 100%;
+}
+
+:deep(.el-dialog__body) {
+  flex: 1;
   overflow: hidden;
+  padding: 0;
+  position: relative;
+}
+
+:deep(.el-dialog__header) {
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+:deep(.el-dialog__headerbtn) {
+  top: 16px;
 }
 </style>
   

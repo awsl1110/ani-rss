@@ -1,62 +1,70 @@
 <template>
   <div class="search-container">
-    <el-row :gutter="16" justify="center" align="middle">
-      <el-col :xs="24" :sm="16" :md="16">
-        <el-input
-            v-model="text"
-            placeholder="请输入搜索标题"
-            @keyup.enter="handleSearch"
-            clearable
-            @clear="handleClear"
-            :disabled="loading"
-            class="search-input"
+    <div class="search-filter-row">
+      <div class="filter-group">
+        <el-tag 
+          v-for="day in weekdays" 
+          :key="day.value"
+          :effect="selectedDay === day.value ? 'dark' : 'plain'"
+          round
+          @click="handleDaySelect(day.value)"
+          :type="selectedDay === day.value ? 'primary' : undefined"
+          class="filter-tag"
         >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-          <template #append>
-            <el-button @click="handleSearch" :loading="loading" type="primary">
-              搜索
-            </el-button>
-          </template>
-        </el-input>
-      </el-col>
-      <el-col :xs="24" :sm="8" :md="6">
+          {{ day.label }}
+        </el-tag>
+
+        <el-tag 
+          v-for="type in types" 
+          :key="type.value"
+          :effect="selectedType === type.value ? 'dark' : 'plain'"
+          round
+          @click="handleTypeSelect(type.value)"
+          :type="selectedType === type.value ? 'primary' : undefined"
+          class="filter-tag"
+        >
+          {{ type.label }}
+        </el-tag>
+      </div>
+      <div class="search-controls">
+        <el-input
+          v-model="text"
+          placeholder="搜索番组..."
+          @keyup.enter="handleSearch"
+          clearable
+          @clear="handleClear"
+          :disabled="loading"
+          :prefix-icon="Search"
+          class="search-input"
+        />
+        
         <el-select
-            v-model="season"
-            @change="handleSeasonChange"
-            :disabled="loading || disabled"
-            placeholder="选择季度"
-            size="small"
-            clearable
-            class="season-select"
+          v-if="seasons.length"
+          v-model="selectedSeason"
+          class="season-select"
+          :disabled="text?.length > 0 || loading"
         >
           <el-option
-              v-for="item in seasons"
-              :key="item.year + ' ' + item.season"
-              :label="item.year + ' ' + item.season"
-              :value="item.year + ' ' + item.season"
+            v-for="item in seasons"
+            :key="item.year + ' ' + item.season"
+            :label="item.year + ' ' + item.season"
+            :value="item.year + ' ' + item.season"
           />
         </el-select>
-      </el-col>
-    </el-row>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { Search } from '@element-plus/icons-vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { Search, Calendar, CaretTop } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useDebounce } from '../composables/useDebounce'
 
 const props = defineProps({
   loading: Boolean,
-  seasons: {
-    type: Array,
-    default: () => []
-  },
   modelValue: String,
-  seasonValue: String,
   disabled: Boolean,
   minLength: {
     type: Number,
@@ -64,16 +72,11 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['search', 'change', 'clear', 'update:modelValue', 'update:seasonValue'])
+const emit = defineEmits(['search', 'clear', 'update:modelValue', 'filter', 'season-change'])
 
 const text = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val)
-})
-
-const season = computed({
-  get: () => props.seasonValue,
-  set: (val) => emit('update:seasonValue', val)
 })
 
 // 使用防抖的搜索函数
@@ -100,38 +103,145 @@ const handleSearch = () => {
 // 处理清除
 const handleClear = () => {
   text.value = ''
+  selectedSeason.value = ''
+  resetFilters()
   emit('clear')
 }
 
-// 处理季度变更
-const handleSeasonChange = (value) => {
-  if (value) {
-    emit('change', value)
-  } else {
-    handleClear()
+// 修改星期数据
+const weekdays = [
+  { label: '周一', value: 'monday' },
+  { label: '周二', value: 'tuesday' },
+  { label: '周三', value: 'wednesday' },
+  { label: '周四', value: 'thursday' },
+  { label: '周五', value: 'friday' },
+  { label: '周六', value: 'saturday' },
+  { label: '周日', value: 'sunday' },
+]
+
+const types = [
+  { label: '剧场版', value: 'movie' },
+  { label: 'OVA', value: 'ova' },
+]
+
+const selectedDay = ref(null)
+const selectedType = ref(null)
+
+// 修改星期和类型的选择处理
+const handleDaySelect = (day) => {
+  selectedDay.value = selectedDay.value === day ? null : day
+  emit('filter', {
+    day: selectedDay.value,
+    type: selectedType.value
+  })
+}
+
+const handleTypeSelect = (type) => {
+  selectedType.value = selectedType.value === type ? null : type
+  emit('filter', {
+    day: selectedDay.value,
+    type: selectedType.value
+  })
+}
+
+// 添加重置过滤器的方法
+const resetFilters = () => {
+  selectedDay.value = null
+  selectedType.value = null
+}
+
+// 修改季度相关的数据结构
+const seasons = ref([])
+const selectedSeason = ref('')
+
+// 修改 watch
+watch(selectedSeason, (newValue) => {
+  if (!newValue) return
+  
+  const [year, season] = newValue.split(' ')
+  const matchedSeason = seasons.value.find(
+    item => item.year + ' ' + item.season === newValue
+  )
+  
+  if (matchedSeason) {
+    emit('season-change', matchedSeason)
+  }
+})
+
+// 添加方法来更新季度列表
+const updateSeasons = (newSeasons) => {
+  seasons.value = newSeasons
+  // 如果有默认选中的季度，自动选中
+  const defaultSeason = newSeasons.find(item => item.select)
+  if (defaultSeason) {
+    selectedSeason.value = defaultSeason.year + ' ' + defaultSeason.season
   }
 }
+
+defineExpose({
+  updateSeasons
+})
 </script>
 
 <style scoped>
 .search-container {
-  padding: 16px;
   background-color: var(--el-bg-color);
   border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 16px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.search-filter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.filter-tag {
+  cursor: pointer;
+  user-select: none;
 }
 
 .search-input {
-  width: 100%;
-  margin-bottom: 8px;
+  width: 300px;
 }
 
 .season-select {
-  width: 100%;
+  width: 200px;
 }
 
-@media (min-width: 768px) {
-  .search-input {
-    margin-bottom: 0;
+@media (max-width: 992px) {
+  .search-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-controls {
+    flex-direction: column;
+  }
+  
+  .search-input,
+  .season-select {
+    width: 100%;
   }
 }
 </style> 
